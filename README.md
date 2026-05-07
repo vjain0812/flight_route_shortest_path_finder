@@ -51,3 +51,5 @@ http://127.0.0.1:5000
 - Python 3.8+
 - Flask
 - Internet connection on first run (to download data files ~3 MB total)
+
+AI statement: Everything in this project 2 were developed by myself.
