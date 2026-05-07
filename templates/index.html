@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flight Route Shortest Path Finder</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+  header { background: #1a1d2e; border-bottom: 1px solid #2d3148; padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; }
+  header h1 { font-size: 1.3rem; font-weight: 600; color: #93c5fd; }
+  header span { font-size: 0.85rem; color: #64748b; }
+  .container { max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; }
+  .card { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }
+  .card h2 { font-size: 1rem; color: #94a3b8; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
+  .form-row { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; }
+  .form-group { flex: 1; min-width: 180px; position: relative; }
+  label { display: block; font-size: 0.8rem; color: #64748b; margin-bottom: 0.4rem; }
+  input[type=text] { width: 100%; padding: 0.6rem 0.8rem; background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; color: #e2e8f0; font-size: 0.95rem; outline: none; }
+  input[type=text]:focus { border-color: #3b82f6; }
+  .autocomplete { position: absolute; top: 100%; left: 0; right: 0; background: #1e2235; border: 1px solid #3b82f6; border-radius: 6px; z-index: 100; max-height: 220px; overflow-y: auto; }
+  .autocomplete div { padding: 0.5rem 0.8rem; cursor: pointer; font-size: 0.85rem; border-bottom: 1px solid #2d3148; }
+  .autocomplete div:hover { background: #2d3148; }
+  .autocomplete .iata { font-weight: 700; color: #93c5fd; margin-right: 0.4rem; }
+  button { padding: 0.6rem 1.5rem; background: #3b82f6; color: #fff; border: none; border-radius: 6px; font-size: 0.95rem; cursor: pointer; white-space: nowrap; }
+  button:hover { background: #2563eb; }
+  button:disabled { background: #374151; cursor: not-allowed; }
+  .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  @media(max-width: 640px) { .results-grid { grid-template-columns: 1fr; } }
+  .result-card { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 1.2rem; }
+  .result-card.highlight { border-color: #3b82f6; }
+  .result-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.8rem; display: flex; justify-content: space-between; align-items: center; }
+  .badge { font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 999px; background: #1e3a5f; color: #93c5fd; }
+  .badge.green { background: #14532d; color: #4ade80; }
+  .stat { font-size: 0.8rem; color: #64748b; margin-bottom: 0.8rem; }
+  .stat strong { color: #e2e8f0; }
+  .path-list { list-style: none; }
+  .path-list li { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; font-size: 0.85rem; border-bottom: 1px solid #1a1d2e; }
+  .path-list li:last-child { border-bottom: none; }
+  .path-list .code { font-weight: 700; color: #93c5fd; width: 40px; flex-shrink: 0; }
+  .path-list .arrow { color: #475569; margin: 0 0.2rem; }
+  .seg-km { margin-left: auto; color: #475569; font-size: 0.75rem; }
+  .error { color: #f87171; padding: 0.8rem; background: #1f1315; border: 1px solid #7f1d1d; border-radius: 6px; font-size: 0.9rem; }
+  .loading { text-align: center; color: #64748b; padding: 2rem; }
+  .no-route { color: #f87171; font-size: 0.85rem; }
+  .diff-note { font-size: 0.8rem; color: #94a3b8; margin-top: 0.8rem; padding: 0.6rem; background: #1a1d2e; border-radius: 6px; line-height: 1.5; }
+  .about { font-size: 0.85rem; color: #64748b; line-height: 1.6; }
+  .about strong { color: #94a3b8; }
+</style>
+</head>
+<body>
+<header>
+  <h1>✈ Flight Route Shortest Path Finder</h1>
+  <span>Dijkstra vs BFS · OpenFlights Dataset</span>
+</header>
+<div class="container">
+
+  <div class="card">
+    <h2>Find Route</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Origin Airport</label>
+        <input type="text" id="src-input" placeholder="e.g. JFK or New York" autocomplete="off">
+        <div class="autocomplete" id="src-ac" style="display:none"></div>
+        <input type="hidden" id="src-code">
+      </div>
+      <div class="form-group">
+        <label>Destination Airport</label>
+        <input type="text" id="dst-input" placeholder="e.g. LAX or Los Angeles" autocomplete="off">
+        <div class="autocomplete" id="dst-ac" style="display:none"></div>
+        <input type="hidden" id="dst-code">
+      </div>
+      <button id="search-btn" onclick="findRoute()">Find Route</button>
+    </div>
+  </div>
+
+  <div id="results"></div>
+
+  <div class="card">
+    <h2>About This App</h2>
+    <p class="about">
+      This tool models the global air route network as a <strong>directed weighted graph</strong> — airports are nodes, and routes are edges.
+      Edge weights are <strong>great-circle distances</strong> (km) computed from real GPS coordinates.<br><br>
+      <strong>Dijkstra's Algorithm</strong> finds the path with the minimum total distance flown — the fewest kilometers in the air.<br>
+      <strong>BFS (Breadth-First Search)</strong> finds the path with the fewest number of stops, ignoring distance.<br><br>
+      Comparing both reveals that the "shortest" route depends on what you're optimizing: distance or layovers.
+      Dataset: <strong>OpenFlights</strong> (~7,000 airports, ~67,000 routes).
+    </p>
+  </div>
+</div>
+
+<script>
+let srcCode = "", dstCode = "";
+
+function setupAutocomplete(inputId, acId, codeId, onSelect) {
+  const input = document.getElementById(inputId);
+  const ac = document.getElementById(acId);
+  let timer;
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) { ac.style.display = "none"; return; }
+    timer = setTimeout(async () => {
+      const res = await fetch(`/search?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (!data.length) { ac.style.display = "none"; return; }
+      ac.innerHTML = data.map(a =>
+        `<div data-code="${a.iata}" data-label="${a.iata} – ${a.city}, ${a.country}">
+          <span class="iata">${a.iata}</span>${a.name} · ${a.city}, ${a.country}
+        </div>`
+      ).join("");
+      ac.style.display = "block";
+      ac.querySelectorAll("div").forEach(div => {
+        div.onclick = () => {
+          input.value = div.dataset.label;
+          document.getElementById(codeId).value = div.dataset.code;
+          onSelect(div.dataset.code);
+          ac.style.display = "none";
+        };
+      });
+    }, 250);
+  });
+  document.addEventListener("click", e => { if (!ac.contains(e.target) && e.target !== input) ac.style.display = "none"; });
+}
+
+setupAutocomplete("src-input", "src-ac", "src-code", c => srcCode = c);
+setupAutocomplete("dst-input", "dst-ac", "dst-code", c => dstCode = c);
+
+async function findRoute() {
+  const src = document.getElementById("src-code").value;
+  const dst = document.getElementById("dst-code").value;
+  const res_div = document.getElementById("results");
+  if (!src || !dst) { res_div.innerHTML = `<div class="error">Please select both airports from the dropdown.</div>`; return; }
+  res_div.innerHTML = `<div class="loading">Computing routes…</div>`;
+  document.getElementById("search-btn").disabled = true;
+  try {
+    const res = await fetch(`/route?src=${src}&dst=${dst}`);
+    const data = await res.json();
+    if (data.error) { res_div.innerHTML = `<div class="error">${data.error}</div>`; return; }
+    res_div.innerHTML = renderResults(data, src, dst);
+  } catch(e) {
+    res_div.innerHTML = `<div class="error">Request failed.</div>`;
+  } finally {
+    document.getElementById("search-btn").disabled = false;
+  }
+}
+
+function renderPath(info) {
+  if (!info) return `<p class="no-route">No route found.</p>`;
+  const stops = info.path.length - 1;
+  let html = `<div class="stat">Stops: <strong>${stops - 1 < 0 ? 0 : stops - 1}</strong> &nbsp;|&nbsp; Total Distance: <strong>${info.total_km.toLocaleString()} km</strong></div>`;
+  html += `<ul class="path-list">`;
+  for (let i = 0; i < info.path.length; i++) {
+    const a = info.path[i];
+    const seg = i < info.segments_km.length ? `<span class="seg-km">${info.segments_km[i].toLocaleString()} km ›</span>` : "";
+    html += `<li><span class="code">${a.iata}</span><span>${a.city}, ${a.country}</span>${seg}</li>`;
+  }
+  html += `</ul>`;
+  return html;
+}
+
+function renderResults(data, src, dst) {
+  const dkm = data.dijkstra ? data.dijkstra.total_km : null;
+  const bkm = data.bfs ? data.bfs.total_km : null;
+  const dstops = data.dijkstra ? data.dijkstra.path.length - 1 : null;
+  const bstops = data.bfs ? data.bfs.path.length - 1 : null;
+  let diff = "";
+  if (dkm && bkm && dkm !== bkm) {
+    const saved = Math.abs(bkm - dkm);
+    diff = `<div class="diff-note">
+      Dijkstra saves <strong>${saved.toLocaleString()} km</strong> over BFS (${((saved/bkm)*100).toFixed(1)}% less distance),
+      but BFS uses <strong>${bstops} stops</strong> vs Dijkstra's <strong>${dstops} stops</strong>.
+      This shows why the choice of algorithm depends on what you optimize for.
+    </div>`;
+  } else if (dkm && bkm && dkm === bkm) {
+    diff = `<div class="diff-note">Both algorithms found the same path for this query.</div>`;
+  }
+
+  return `<div class="card">
+    <h2>Results: ${src} → ${dst}</h2>
+    <div class="results-grid">
+      <div class="result-card highlight">
+        <div class="result-title">Dijkstra (Min Distance) <span class="badge">Optimal km</span></div>
+        ${renderPath(data.dijkstra)}
+      </div>
+      <div class="result-card">
+        <div class="result-title">BFS (Fewest Stops) <span class="badge green">Min Hops</span></div>
+        ${renderPath(data.bfs)}
+      </div>
+    </div>
+    ${diff}
+  </div>`;
+}
+</script>
+</body>
+</html>
