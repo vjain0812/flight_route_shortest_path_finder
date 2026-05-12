@@ -1,3 +1,4 @@
+# AI Statement: All work done in this homework is my own work.
 import csv
 import heapq
 import math
